@@ -1,4 +1,4 @@
-# M5Cardputer CW Trainer & Interactive Prosign Quiz (TB3NHM)
+# M5Cardputer CW Trainer (TB3NHM)
 
 An interactive, portable Morse Code (CW) trainer developed for the **M5Stack Cardputer**. This tool is designed for amateur radio operators (Hams) to practice listening, sending, and mastering common CW abbreviations and prosigns on the go.
 
