@@ -46,7 +46,7 @@ An interactive, portable Morse Code (CW) trainer developed for the **M5Stack Car
 ## 📚 Credits & Standards
 
 - **Abbreviations:** Sourced from the [CWops Abbreviations List](https://cwops.org/).
-- **Developer:** [Your Name/Callsign]
+- **Developer:** Hüseyin EROL, TB3NHM
 - **Hardware:** Powered by [M5Stack](https://m5stack.com/).
 
 ## ⚖️ License
