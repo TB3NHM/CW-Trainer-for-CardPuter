@@ -1,0 +1,238 @@
+#include <M5Cardputer.h>
+
+// ---TB3NHM--- Greetings from KM38ro Manisa, TURKIYE
+// --- Settings ---
+const unsigned int toneFreq = 700; 
+const int dotLen = 100;           
+const int dashLen = 300;          
+const int screenW = 240; 
+const int screenH = 135; 
+
+// --- Variables ---
+int currentMode = 0; 
+int menuIndex = 0;   
+char targetChar = ' ';
+String currentInputMorse = "";
+String userTextAttempt = "";
+String freeModeBuffer = ""; 
+int challengeIndex = 0;
+
+const char* morseTable[] = {
+    ".-", "-...", "-.-.", "-..", ".", "..-.", "--.", "....", "..", ".---", 
+    "-.-", ".-..", "--", "-.", "---", ".--.", "--.-", ".-.", "...", "-", 
+    "..-", "...-", ".--", "-..-", "-.--", "--.."
+};
+
+struct Shortcut {
+    const char* code;
+    const char* mean;
+};
+
+Shortcut shortcuts[] = {
+    {"CQ", "Calling any station"}, {"DE", "From / This is"}, {"K", "Go ahead"},
+    {"PSE", "Please"}, {"UR", "Your / You are"}, {"FB", "Fine Business"},
+    {"R", "Roger / Received"}, {"TU", "Thank You"}, {"73", "Best Regards"},
+    {"88", "Love and Kisses"}, {"QTH", "Location"}, {"QSL", "Confirmed"},
+    {"QRP", "Low Power"}, {"QRZ", "Who calls me?"}, {"RST", "Signal Report"},
+    {"WX", "Weather"}, {"OP", "Operator"}, {"SK", "End of contact"},
+    {"GA", "Good Afternoon"}, {"BK", "Back / Break-in"}
+};
+const int shortcutCount = 20;
+
+// --- UI Helper: Centered Text ---
+void drawCenteredString(String text, int y, int size, uint16_t color) {
+    M5Cardputer.Display.setTextSize(size);
+    M5Cardputer.Display.setTextColor(color);
+    int width = M5Cardputer.Display.textWidth(text);
+    M5Cardputer.Display.setCursor((screenW - width) / 2, y);
+    M5Cardputer.Display.print(text);
+}
+
+void playTone(int duration) {
+    M5Cardputer.Speaker.tone(toneFreq, duration);
+    delay(duration);
+    M5Cardputer.Speaker.stop();
+}
+
+void playMorseForChar(char c) {
+    if (c >= 'A' && c <= 'Z') {
+        const char* morse = morseTable[c - 'A'];
+        for (int i = 0; morse[i] != '\0'; i++) {
+            if (morse[i] == '.') playTone(dotLen);
+            else if (morse[i] == '-') playTone(dashLen);
+            delay(dotLen);
+        }
+    }
+}
+
+char morseToChar(String morse) {
+    for (int i = 0; i < 26; i++) {
+        // String nesnesi ile const char* karşılaştırması düzeltildi
+        if (morse.equals(morseTable[i])) return (char)('A' + i);
+    }
+    return '?';
+}
+
+// --- Scenes ---
+void drawMenu() {
+    M5Cardputer.Display.fillScreen(BLACK);
+    M5Cardputer.Display.drawRoundRect(5, 5, 230, 125, 8, DARKGREY);
+    drawCenteredString("== CW TRAINER ==", 15, 2, YELLOW);
+    
+    String options[] = {"Listening Mode", "Sending Mode", "Abbrev. Challenge", "Free Mode"};
+    for (int i = 0; i < 4; i++) {
+        uint16_t color = (i == menuIndex) ? GREEN : WHITE;
+        String prefix = (i == menuIndex) ? "> " : "  ";
+        drawCenteredString(prefix + options[i], 45 + (i * 18), 1.2, color);
+    }
+    drawCenteredString("'.' to scroll, Enter to select", 118, 1, DARKGREY);
+}
+
+void initListeningMode() {
+    targetChar = (char)('A' + random(0, 26));
+    currentInputMorse = "";
+    M5Cardputer.Display.fillScreen(BLACK);
+    drawCenteredString("LISTENING MODE", 15, 2, CYAN);
+    drawCenteredString("Listening...", 55, 1.5, WHITE);
+    delay(800);
+    playMorseForChar(targetChar);
+    // GRAY hatası DARKGREY ile düzeltildi
+    drawCenteredString("Z=DIT, M=DAH, Enter=Confirm", 85, 1, DARKGREY);
+}
+
+void initSendingMode() {
+    currentInputMorse = "";
+    M5Cardputer.Display.fillScreen(BLACK);
+    drawCenteredString("SENDING MODE", 15, 2, ORANGE);
+    drawCenteredString("Z=DIT | M=DAH | ENTER=DECODE", 50, 1, WHITE);
+    drawCenteredString("Ready for input...", 80, 1.2, CYAN);
+}
+
+void initFreeMode() {
+    currentInputMorse = "";
+    freeModeBuffer = "";
+    M5Cardputer.Display.fillScreen(BLACK);
+    drawCenteredString("FREE MODE (TX)", 15, 2, GREEN);
+    // GRAY hatası DARKGREY ile düzeltildi
+    drawCenteredString("Z/M: Morse | Space: Gap | Enter: Decode", 40, 1, DARKGREY);
+    M5Cardputer.Display.drawFastHLine(10, 55, 220, DARKGREY);
+}
+
+void initAbbreviationChallenge() {
+    userTextAttempt = "";
+    M5Cardputer.Display.fillScreen(BLACK);
+    drawCenteredString("ABBREV. CHALLENGE", 15, 2, MAGENTA);
+    drawCenteredString("Listen & Type Code", 45, 1.2, WHITE);
+    delay(800);
+    String codeToPlay = shortcuts[challengeIndex].code;
+    for (int i = 0; i < (int)codeToPlay.length(); i++) {
+        playMorseForChar(toupper(codeToPlay[i]));
+        delay(200);
+    }
+    drawCenteredString("Your Answer:", 75, 1, YELLOW);
+}
+
+void setup() {
+    auto cfg = M5.config();
+    M5Cardputer.begin(cfg, true);
+    M5Cardputer.Display.setRotation(1);
+    randomSeed(analogRead(0));
+    drawMenu();
+}
+
+void loop() {
+    M5Cardputer.update();
+
+    if (M5Cardputer.Keyboard.isPressed()) {
+        if (M5Cardputer.Keyboard.isKeyPressed(KEY_BACKSPACE)) {
+            currentMode = 0; drawMenu(); delay(250); return;
+        }
+
+        if (currentMode == 0) {
+            if (M5Cardputer.Keyboard.isKeyPressed('.')) {
+                menuIndex = (menuIndex + 1) % 4; drawMenu(); delay(200);
+            }
+            if (M5Cardputer.Keyboard.isKeyPressed(KEY_ENTER)) {
+                currentMode = menuIndex + 1;
+                if (currentMode == 1) initListeningMode();
+                else if (currentMode == 2) initSendingMode();
+                else if (currentMode == 3) initAbbreviationChallenge();
+                else if (currentMode == 4) initFreeMode();
+                delay(250);
+            }
+        }
+        else if (currentMode == 1 || currentMode == 2 || currentMode == 4) {
+            if (M5Cardputer.Keyboard.isKeyPressed('z') || M5Cardputer.Keyboard.isKeyPressed('Z')) {
+                playTone(dotLen); currentInputMorse += ".";
+                M5Cardputer.Display.fillRect(0, 100, 240, 30, BLACK);
+                drawCenteredString(currentInputMorse, 105, 2, YELLOW); delay(150);
+            } else if (M5Cardputer.Keyboard.isKeyPressed('m') || M5Cardputer.Keyboard.isKeyPressed('M')) {
+                playTone(dashLen); currentInputMorse += "-";
+                M5Cardputer.Display.fillRect(0, 100, 240, 30, BLACK);
+                drawCenteredString(currentInputMorse, 105, 2, YELLOW); delay(150);
+            } 
+            else if (currentMode == 4 && M5Cardputer.Keyboard.isKeyPressed(' ')) {
+                freeModeBuffer += " ";
+                M5Cardputer.Display.fillRect(0, 65, 240, 30, BLACK);
+                drawCenteredString(freeModeBuffer, 70, 2, WHITE);
+                delay(200);
+            }
+            else if (M5Cardputer.Keyboard.isKeyPressed(KEY_ENTER)) {
+                char res = morseToChar(currentInputMorse);
+                
+                if (currentMode == 1) { 
+                    M5Cardputer.Display.fillRect(0, 80, 240, 55, BLACK);
+                    if (res == targetChar) {
+                        drawCenteredString("CORRECT! Letter: " + String(targetChar), 95, 1.5, GREEN);
+                        delay(1500); initListeningMode();
+                    } else {
+                        drawCenteredString("WRONG! Retrying...", 95, 1.5, RED);
+                        delay(1500); currentInputMorse = ""; initListeningMode();
+                    }
+                } 
+                else if (currentMode == 2) { 
+                    M5Cardputer.Display.fillRect(0, 80, 240, 55, BLACK);
+                    drawCenteredString("Decoded: " + String(res), 95, 1.5, GREEN);
+                    delay(1500); initSendingMode();
+                }
+                else if (currentMode == 4) { 
+                    if (currentInputMorse != "") {
+                        if (res != '?') freeModeBuffer += res;
+                        else freeModeBuffer += "*"; 
+                        
+                        currentInputMorse = "";
+                        M5Cardputer.Display.fillRect(0, 65, 240, 65, BLACK);
+                        drawCenteredString(freeModeBuffer, 70, 2, WHITE);
+                        
+                        if(freeModeBuffer.length() > 15) freeModeBuffer = ""; 
+                    }
+                    delay(200);
+                }
+            }
+        }
+        else if (currentMode == 3) { 
+            for (auto i : M5Cardputer.Keyboard.keysState().word) {
+                if (userTextAttempt.length() < 6) {
+                    userTextAttempt += (char)i;
+                    M5Cardputer.Display.fillRect(0, 90, 240, 20, BLACK);
+                    drawCenteredString(userTextAttempt, 95, 1.5, WHITE);
+                    delay(200);
+                }
+            }
+            if (M5Cardputer.Keyboard.isKeyPressed(KEY_ENTER)) {
+                M5Cardputer.Display.fillRect(0, 80, 240, 55, BLACK);
+                if (userTextAttempt.equalsIgnoreCase(shortcuts[challengeIndex].code)) {
+                    drawCenteredString("CORRECT!", 90, 1.2, GREEN);
+                    drawCenteredString(shortcuts[challengeIndex].mean, 110, 1, WHITE);
+                    delay(2500);
+                    challengeIndex = (challengeIndex + 1) % shortcutCount;
+                    initAbbreviationChallenge();
+                } else {
+                    drawCenteredString("WRONG! Try Again", 100, 1.2, RED);
+                    delay(1500); initAbbreviationChallenge();
+                }
+            }
+        }
+    }
+    delay(10);
+}
